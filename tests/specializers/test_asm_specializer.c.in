@@ -1,0 +1,133 @@
+#include <stdio.h>
+#include <stdlib.h>
+#include <stdint.h>
+#include <string.h>
+
+#define ALIGNMENT 64
+
+$GETSIMDSIZE
+
+$BLOCKDEFINES
+
+// Test an asm ukernel against a reference ukernel
+#define test_gemm(CODEBLOCK, VECMR, NR, KR)				\
+  {									\
+    size_t ldc = NR;							\
+    size_t cs_c = get_simd_size() / sizeof($DTC);			\
+    size_t MR = VECMR * cs_c;						\
+									\
+    $DTAB *A = init_randmatAB(MR * KR);					\
+    $DTAB *B = init_randmatAB(KR * NR);					\
+    $DTC *C = init_randmatC(MR * NR);					\
+    $DTC *C_ref = init_copymat(C, MR * NR);				\
+									\
+    asm(CODEBLOCK);							\
+    ref_gemm(MR, NR, KR, alpha_val, A, B, beta_val, C_ref);		\
+    const double err = diff_asum(MR * NR, C, C_ref);			\
+									\
+    printf("VM = %2d, M = %3zu, N = %2d, K = %2d, 1-err = %.2e", VECMR, MR, NR, KR, err); \
+    if (err > 10 * machine_epsilon()) {					\
+      printf(" FAILURE\n");						\
+      errcount++;							\
+    } else {								\
+      printf(" SUCCESS\n");						\
+    }									\
+    free(A);								\
+    free(B);								\
+    free(C);								\
+    free(C_ref);							\
+  }
+
+
+$DTC *init_copymat(const $DTC *src, size_t N)
+{
+  $DTC *cpy = aligned_alloc(ALIGNMENT, N * sizeof($DTC));
+  memcpy(cpy, src, N * sizeof(*src));
+
+  return cpy;
+}
+
+$DTC *init_randmatC(size_t N)
+{
+  $DTC *C = aligned_alloc(ALIGNMENT, N * sizeof($DTC));
+  for (size_t n = 0; n < N; n++)
+    C[n] = ($DTC) (drand48() - 0.5);
+
+  return C;
+}
+
+$DTAB *init_randmatAB(size_t N)
+{
+  $DTAB *A = aligned_alloc(ALIGNMENT, N * sizeof($DTAB));
+  for (size_t n = 0; n < N; n++)
+    A[n] = ($DTAB) (drand48() - 0.5);
+
+  return A;
+}
+
+$DTC machine_epsilon(void)
+{
+  const $DTC x = ($DTC) 1.;
+  union
+  {
+    $DTC f;
+    uint64_t i;
+  } u = {x};
+  u.i++;
+
+  return u.f - x;
+}
+
+double dtfabs($DTC x)
+{
+  union
+  {
+    double f;
+    uint64_t i;
+  } u = {x};
+  u.i &= -1ULL / 2;
+
+  return u.f;
+}
+
+double diff_asum(size_t N, const $DTC *C1, const $DTC *C2)
+{
+  double err = 0;
+  for (size_t i = 0; i < N; i++)
+    err += dtfabs(C1[i] - C2[i]);
+
+  return err;
+}
+
+// Packed matrices, i.e. A col-major, B row-major
+void ref_gemm(size_t M, size_t N, size_t K, const $DTAB alpha,
+	      const $DTAB *A, const $DTAB *B, const $DTAB beta, $DTC *C)
+{
+  for (size_t j = 0; j < N; j++) {
+    for (size_t i = 0; i < M; i++) {
+      C[j * M + i] *= beta;
+      for (size_t k = 0; k < K; k++) {
+	C[j * M + i] += alpha * A[k * M + i] * B[k * N + j];
+      }
+    }
+  }
+}
+
+int main(int argc, char* argv[])
+{
+  srand48((long) 21927);
+  /* const $DTAB alpha_val = ($DTAB) (drand48() - 0.5); */
+  /* const $DTAB beta_val = ($DTAB) (drand48() - 0.5); */
+
+  const $DTAB alpha_val = 1.;
+  const $DTAB beta_val = 0.;
+  const $DTAB *alpha = &alpha_val;
+  const $DTAB *beta = &beta_val;
+
+  int errcount = 0;
+
+  $EVALUATIONS;
+    
+  return errcount;
+}
+
