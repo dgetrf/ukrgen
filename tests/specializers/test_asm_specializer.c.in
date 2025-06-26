@@ -25,7 +25,8 @@ $BLOCKDEFINES
     ref_gemm(MR, NR, KR, alpha_val, A, B, beta_val, C_ref);		\
     const double err = diff_asum(MR * NR, C, C_ref);			\
 									\
-    printf("VM = %2d, M = %3zu, N = %2d, K = %2d, 1-err = %.2e", VECMR, MR, NR, KR, err); \
+    printf("VM = %2d, M = %3zu, N = %2d, K = %2d, 1-err = %.2e", VECMR, \
+	   MR, NR, KR, err);						\
     if (err > 10 * machine_epsilon()) {					\
       printf(" FAILURE\n");						\
       errcount++;							\
@@ -41,7 +42,7 @@ $BLOCKDEFINES
 
 $DTC *init_copymat(const $DTC *src, size_t N)
 {
-  $DTC *cpy = aligned_alloc(ALIGNMENT, N * sizeof($DTC));
+  $DTC *cpy = ($DTC *) aligned_alloc(ALIGNMENT, N * sizeof($DTC));
   memcpy(cpy, src, N * sizeof(*src));
 
   return cpy;
@@ -49,7 +50,7 @@ $DTC *init_copymat(const $DTC *src, size_t N)
 
 $DTC *init_randmatC(size_t N)
 {
-  $DTC *C = aligned_alloc(ALIGNMENT, N * sizeof($DTC));
+  $DTC *C = ($DTC *) aligned_alloc(ALIGNMENT, N * sizeof($DTC));
   for (size_t n = 0; n < N; n++)
     C[n] = ($DTC) (drand48() - 0.5);
 
@@ -58,7 +59,7 @@ $DTC *init_randmatC(size_t N)
 
 $DTAB *init_randmatAB(size_t N)
 {
-  $DTAB *A = aligned_alloc(ALIGNMENT, N * sizeof($DTAB));
+  $DTAB *A = ($DTAB *) aligned_alloc(ALIGNMENT, N * sizeof($DTAB));
   for (size_t n = 0; n < N; n++)
     A[n] = ($DTAB) (drand48() - 0.5);
 

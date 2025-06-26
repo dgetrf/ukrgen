@@ -17,13 +17,15 @@ from asmgen.asmblocks.sve import sve
 
 from asmgen.asmblocks.operations import widening_method as wm
 
-
 from asmgen.registers import (
     asm_data_type as adt,
     adt_triple,
     adt_size,
     reg_tracker
 )
+
+from asmgen.compilation.tools import compiler
+
 from ukrgen.specializers.asm import lsc_specializer
 from ukrgen.components import simple_ukr_tile,dimension_type,dimension_properties
 from ukrgen.generators.mm import mm,order2D
@@ -95,6 +97,12 @@ class test_asm_specializer(unittest.TestCase):
         self.sched_war_distance = 0
         self.sched_waw_distance = 0
 
+        # Specify compiler via environment variable
+        self.cxx = compiler('g++','rvv')
+        cxx_exec = os.getenv("CXX_COMPILER")
+        if cxx_exec is not None:
+            self.cxx.executable = cxx_exec
+        
         # Arguments for remote execution can be passed via environment variables
         self.remote_hostname = os.getenv("REMOTE_HOSTNAME")
         self.remote_dir = os.getenv("REMOTE_DIR")
@@ -262,7 +270,7 @@ class test_asm_specializer(unittest.TestCase):
                 blockdefines = ""
                 for i, (asm_block, mnk) in enumerate(zip(asm_block_list, self.mkn_list)):
                     gemm_asm = [] + pre_block
-                    gemm_asm += [a.replace("\"\n","\"\\\n").replace("vv", "vf") for a in asm_block[:-1]]
+                    gemm_asm += [a.replace("\"\n","\"\\\n") for a in asm_block[:-1]]
                     # Insert after first vsetvli in asm_block
                     gemm_asm.insert(5, "\"mv t0, t4\\n\\t\"\\\n")
                     gemm_asm += post_block
@@ -281,26 +289,21 @@ class test_asm_specializer(unittest.TestCase):
                 }
 
                 prefix = os.path.join(os.getcwd(), "tests", "specializers")
-                filename = os.path.join(prefix, "test_asm_specializer.c.in")
+                src_path = os.path.join(prefix, "test_asm_specializer.c.in")
                 source_code = ""
-                with open(filename, 'r') as f:
+                with open(src_path, 'r') as f:
                     src = Template(f.read())
                     source_code = src.substitute(substitutions)
-                    filename = filename.replace(".in","") 
-                with open(filename, 'w') as f:
-                    f.write(source_code)
 
                 output_filename = "test_asm_specializer.x"
                 output_path = os.path.join(prefix, output_filename)
-                compilation = ["/opt/riscv/bin/riscv64-unknown-linux-gnu-gcc", "-Wall",
-                               "-march=rv64gcv_zicbop", "-g", "-static", f"{filename}",
-                               "-o", f"{output_path}"]
-                print(" ".join(compilation))
-                result = subprocess.run(compilation, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
 
-                if result.returncode != 0:
-                    print(result.stderr.decode())
-                    raise RuntimeError("Compilation failed")
+                result = self.cxx.compile_exe(source=source_code,
+                                              output_filename=output_path,
+                                              libs=[], cross_compile='native',
+                                              extraflags=['-static'])
+                if not result:
+                    raise RuntimeError("compilation failed")
 
                 if self.remote_hostname is not None:
                     cmd = ["scp", output_path, f"{self.remote_hostname}:{self.remote_dir}"]
