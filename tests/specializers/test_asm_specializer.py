@@ -77,7 +77,8 @@ class test_asm_specializer(unittest.TestCase):
     # Prepare lists of parameters
     def setUp(self):
         # Choose isa here
-        self.gen = asmgen_map['rvv']()
+        self.gen_str = 'rvv'
+        self.gen = asmgen_map[self.gen_str]()
         self.op = 'fma'
 
         # Try all possible combinations of data types
@@ -98,7 +99,7 @@ class test_asm_specializer(unittest.TestCase):
         self.sched_waw_distance = 0
 
         # Specify compiler via environment variable
-        self.cxx = compiler('g++','rvv')
+        self.cxx = compiler('g++', self.gen_str)
         cxx_exec = os.getenv("CXX_COMPILER")
         if cxx_exec is not None:
             self.cxx.executable = cxx_exec
